@@ -58,7 +58,7 @@ class PSVTextureLoader extends AbstractService {
 
       return this.__loadCubemapTexture(tempPanorama);
     }
-    else if (typeof panorama === 'object') {
+    else if (typeof panorama === 'object' && panorama.tagName !== 'VIDEO') {
       if (!CUBE_HASHMAP.every(side => !!panorama[side])) {
         throw new PSVError('Must provide exactly left, front, right, back, top, bottom when using cubemap.');
       }
@@ -100,6 +100,55 @@ class PSVTextureLoader extends AbstractService {
         });
       }
     }
+
+    ////// Start Video Texture ///////
+    if (this.videoRenderInterval) {
+      clearInterval(this.videoRenderInterval);
+    }
+    if(panorama.tagName == "VIDEO" || (typeof panorama == "string" && panorama.endsWith('.mp4'))) {
+      var video;
+      if(panorama.tagName == "VIDEO") {
+        video = panorama;
+      } else {
+        video = document.createElement('video');
+        video.src = panorama;
+      }
+      video.width = window.innerWidth;
+      video.height = window.innerHeight;
+      video.loop = true;
+      video.muted = true;
+      video.setAttribute('webkit-playsinline', 'webkit-playsinline');
+      video.play();
+
+      var texture = new THREE.VideoTexture(video);
+      texture.minFilter = THREE.LinearFilter;
+      texture.format = THREE.RGBFormat;
+      texture.needsUpdate = true;
+      // Default XMP data
+      var pano_data = {
+        full_width: window.innerWidth,
+        full_height: window.innerHeight,
+        cropped_width: window.innerWidth,
+        cropped_height: window.innerHeight,
+        cropped_x: 0,
+        cropped_y: 0
+      };
+      if (this.config.cache_texture) {
+        this._putPanoramaCache({
+          panorama: panorama,
+          image: texture,
+          pano_data: pano_data
+        });
+      }
+      // We need to render the view in order to animate the video
+      // in 25 imgs/seconds
+      var $this = this;
+      this.videoRenderInterval = setInterval(function () {
+        $this.render();
+      }, 40);
+      return Promise.resolve(texture);
+    }
+    ////// End Video //////
 
     return this.__loadXMP(panorama)
       .then(xmpPanoData => new Promise((resolve, reject) => {
